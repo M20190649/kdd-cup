@@ -1,79 +1,89 @@
-# -*- coding: utf-8 -*-
-# !/usr/bin/env python
-
-"""
-Objective:
-Calculate the average travel time for each 20-minute time window.
-
-"""
-
 # import necessary modules
-import math
-from datetime import datetime, timedelta
+from datetime import timedelta, datetime
+
+import pandas as pd
+
+from sklearn import preprocessing
 
 # set the data directory
 file_suffix = '.csv'
 path = '../dataSets/training/'
 
 
-def avg_travel_time(in_file):
+def avg_travel_time(**kwargs):
     out_suffix = '_20min_avg_travel_time'
-    in_file_name = in_file + file_suffix
-    out_file_name = in_file.split('_')[1] + out_suffix + file_suffix
+    trajectories_file = kwargs['trajectories_file'] + file_suffix
+    weather_file = kwargs['weather_file'] + file_suffix
 
-    # Step 1: Load trajectories
-    fr = open(path + in_file_name, 'r')
-    fr.readline()  # skip the header
-    traj_data = fr.readlines()
-    fr.close()
-    print(traj_data[0])
+    out_file_name = kwargs['trajectories_file'].split('_')[1] + out_suffix + file_suffix
 
-    # Step 2: Create a dictionary to store travel time for each route per time window
-    travel_times = {}
-    # key: route_id. Value is also a dictionary of which key is the start time for the time window and value is a list of travel times
-    for i in range(len(traj_data)):
-        each_traj = traj_data[i].replace('"', '').split(',')
-        intersection_id = each_traj[0]
-        tollgate_id = each_traj[1]
+    #####################
+    # Load trajectories #
+    #####################
+    trajectories = pd.read_csv(path + trajectories_file, parse_dates=['starting_time'])
+    # Group in 20 minutes
+    start_times = []
+    for start_time in trajectories['starting_time']:
+        start_times.append(start_time - timedelta(minutes=start_time.minute % 20, seconds=start_time.second, ))
+    trajectories['starting_time'] = start_times
+    # Cal average travel time for each route per time window
+    trajectories = trajectories.groupby(
+        ['intersection_id', 'tollgate_id', 'starting_time']
+    )['travel_time'].mean().reset_index()
 
-        route_id = intersection_id + '-' + tollgate_id
-        if route_id not in travel_times.keys():
-            travel_times[route_id] = {}
+    # Create date_hour in order to merge with weather
+    date_hour = []
+    for start_time in trajectories['starting_time']:
+        # date_time belongs to 1:30h before or after the hour in weather
+        time_delta = timedelta(hours=start_time.hour % 3, minutes=start_time.minute, seconds=start_time.second)
+        if time_delta > timedelta(hours=1, minutes=30):
+            start_time = start_time + timedelta(hours=3)
+        date_hour.append(start_time - time_delta)
+    trajectories['date_hour'] = date_hour
 
-        trace_start_time = each_traj[3]
-        trace_start_time = datetime.strptime(trace_start_time, "%Y-%m-%d %H:%M:%S")
-        time_window_minute = math.floor(trace_start_time.minute / 20) * 20
-        start_time_window = datetime(trace_start_time.year, trace_start_time.month, trace_start_time.day,
-                                     trace_start_time.hour, time_window_minute, 0)
-        tt = float(each_traj[-1])  # travel time
+    ################
+    # Load weather #
+    ################
+    weather = pd.read_csv(path + weather_file)
+    # Combine date and hour
+    weather['date_hour'] = pd.to_datetime(
+        weather['date'], format="%Y-%m-%d"
+    ) + pd.to_timedelta(
+        weather['hour'], unit="H"
+    )
+    # Delete unused column
+    weather = weather.drop(['date', 'hour'], axis=1)
 
-        if start_time_window not in travel_times[route_id].keys():
-            travel_times[route_id][start_time_window] = [tt]
-        else:
-            travel_times[route_id][start_time_window].append(tt)
+    ##########
+    # Merger #
+    ##########
+    training_set = pd.merge(trajectories, weather, on='date_hour')
 
-    # Step 3: Calculate average travel time for each route per time window
-    fw = open(out_file_name, 'w')
-    fw.writelines(','.join(['"intersection_id"', '"tollgate_id"', '"time_window"', '"avg_travel_time"']) + '\n')
-    for route in travel_times.keys():
-        route_time_windows = list(travel_times[route].keys())
-        route_time_windows.sort()
-        for time_window_start in route_time_windows:
-            time_window_end = time_window_start + timedelta(minutes=20)
-            tt_set = travel_times[route][time_window_start]
-            avg_tt = round(sum(tt_set) / float(len(tt_set)), 2)
-            out_line = ','.join([
-                '"' + route.split('-')[0] + '"', '"' + route.split('-')[1] + '"',
-                '"[' + str(time_window_start) + ',' + str(time_window_end) + ')"',
-                '"' + str(avg_tt) + '"'
-            ]) + '\n'
-            fw.writelines(out_line)
-    fw.close()
+    ######################
+    # Convert to digital #
+    ######################
+    # Split date to week, hour, minute
+    weeks = []
+    hours = []
+    minutes = []
+    for start_time in training_set['starting_time']:
+        weeks.append(datetime.strftime(start_time, format='%w'))
+        hours.append(start_time.hour)
+        minutes.append(start_time.minute)
+    training_set['week'] = weeks
+    training_set['hour'] = hours
+    training_set['minute'] = minutes
+
+    lb = preprocessing.LabelEncoder()
+    training_set['intersection_id'] = lb.fit_transform(training_set['intersection_id'])
 
 
 def main():
-    in_file = 'trajectories(table 5)_training'
-    avg_travel_time(in_file)
+    file_args = {
+        'trajectories_file': 'trajectories(table 5)_training',
+        'weather_file': 'weather (table 7)_training'
+    }
+    avg_travel_time(**file_args)
 
 
 if __name__ == '__main__':
