@@ -11,11 +11,10 @@ path = '../dataSets/training/'
 
 
 def avg_travel_time(**kwargs):
-    out_suffix = '_20min_avg_travel_time'
     trajectories_file = kwargs['trajectories_file'] + file_suffix
     weather_file = kwargs['weather_file'] + file_suffix
 
-    out_file_name = kwargs['trajectories_file'].split('_')[1] + out_suffix + file_suffix
+    file_type = kwargs['trajectories_file'].split('_')[1]
 
     #####################
     # Load trajectories #
@@ -30,6 +29,7 @@ def avg_travel_time(**kwargs):
     trajectories = trajectories.groupby(
         ['intersection_id', 'tollgate_id', 'starting_time']
     )['travel_time'].mean().reset_index()
+    trajectories = trajectories.round({'travel_time': 2})
 
     # Create date_hour in order to merge with weather
     date_hour = []
@@ -76,6 +76,8 @@ def avg_travel_time(**kwargs):
 
     lb = preprocessing.LabelEncoder()
     training_set['intersection_id'] = lb.fit_transform(training_set['intersection_id'])
+
+    training_set.to_csv(path + file_type + file_suffix, index=False)
 
 
 def main():
