@@ -1,3 +1,4 @@
 .idea/
 dataSets/
 data/
+*.pyc
