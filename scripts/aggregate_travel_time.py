@@ -9,7 +9,6 @@ from sklearn import preprocessing
 file_suffix = '.csv'
 path = '../dataSets/training/'
 
-
 def avg_travel_time(**kwargs):
     trajectories_file = kwargs['trajectories_file'] + file_suffix
     weather_file = kwargs['weather_file'] + file_suffix
