@@ -17,7 +17,7 @@ def merge_file(path, **kwargs):
     # Group in 20 minutes
     start_times = []
     for start_time in trajectories['starting_time']:
-        start_times.append(start_time - timedelta(minutes=start_time.minute % 20, seconds=start_time.second, ))
+        start_times.append(start_time - timedelta(minutes=start_time.minute % 20, seconds=start_time.second))
     trajectories['starting_time'] = start_times
     # Cal average travel time for each route per time window
     trajectories = trajectories.groupby(

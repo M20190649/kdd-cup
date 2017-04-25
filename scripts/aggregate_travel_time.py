@@ -1,3 +1,4 @@
+
 from datetime import datetime
 
 import numpy as np
@@ -7,7 +8,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import make_scorer
 from sklearn.model_selection import cross_val_score
 
-from scripts.pre_processing import merge_file
+from pre_processing import merge_file
 
 
 def MAPE(y_true, y_pred):
