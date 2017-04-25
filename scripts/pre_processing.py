@@ -1,7 +1,6 @@
 from datetime import timedelta, datetime
 
 import pandas as pd
-from sklearn import preprocessing
 
 # set the data directory
 file_suffix = '.csv'
@@ -69,9 +68,6 @@ def merge_file(path, **kwargs):
     training_set['hour'] = hours
     training_set['minute'] = minutes
 
-    # Encode intersection_id
-    lb = preprocessing.LabelEncoder()
-    training_set['intersection_id'] = lb.fit_transform(training_set['intersection_id'])
+    training_set = training_set.drop('date_hour', axis=1)
 
-    # Order by intersection_id, tollgate_id, starting_time
     return training_set
