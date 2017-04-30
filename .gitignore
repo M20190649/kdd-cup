@@ -1,6 +1,2 @@
 .idea/
-dataSets/
-data/
 *.pyc
-/scripts/*.csv
-materials/

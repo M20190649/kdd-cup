@@ -1,78 +1,78 @@
-
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
-from sklearn import preprocessing
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import make_scorer
-from sklearn.model_selection import cross_val_score
 
-from pre_processing import merge_file
+from scripts.preprocessing.travel_time import traj_weather
 
-
-def MAPE(y_true, y_pred):
-    return np.mean(np.abs((y_true - y_pred) / y_true))
+file_suffix = '.csv'
+file_path = '../dataSets/travel_time/'
+sample_path = '../data/'
 
 
 def avg_travel_time():
-    training_path = '../dataSets/training/'
-    # training_files = {
-    #     'trajectories_file': 'trajectories(table 5)_training',
-    #     'weather_file': 'weather (table 7)_training_update'
-    # }
-    # training_set = merge_file(training_path, **training_files)
-    #
-    test_path = '../dataSets/testing_phase1/'
-    # test_files = {
-    #     'trajectories_file': 'trajectories(table 5)_test1',
-    #     'weather_file': 'weather (table 7)_test1'
-    # }
-    # test_set = merge_file(test_path, **test_files)
-    #
-    # # Extend training file
-    # training_set = training_set.append(test_set)
-    # training_set.to_csv(training_path + 'training.csv', index=False)
-
-    # Training set
-    training_set = pd.read_csv(training_path + 'training.csv', parse_dates=['starting_time'])
-    x_training = training_set.drop(['starting_time', 'travel_time'], axis=1).reset_index()
-    y_training = training_set['travel_time']
-
-    # # Create test set
-    # test_set = pd.read_csv('../data/' + 'submission_sample_travelTime.csv')
-    # test_set['starting_time'] = test_set['time_window'].apply(
-    #     lambda x: datetime.strptime(x.split(',')[0].split('[')[1], '%Y-%m-%d %H:%M:%S')
-    # )
-    # test_set = test_set.rename(columns={"avg_travel_time": "travel_time"})
-    # test_set.to_csv(test_path + 'test.csv', index=False)
-
-    test_files = {
-        'trajectories_file': 'test',
-        'weather_file': 'weather (table 7)_test1'
+    route_dict = {
+        'A': [2, 3],
+        'B': [1, 3],
+        'C': [1, 3]
     }
-    test_set = merge_file(test_path, **test_files)
-    x_test = test_set.drop(['starting_time', 'travel_time'], axis=1).reset_index()
+    # load weather
+    weather_file = '../dataSets/testing_phase1/' + 'weather (table 7)_test1' + file_suffix
+    weather = pd.read_csv(weather_file)
 
-    # Encode intersection_id
-    lb = preprocessing.LabelEncoder()
-    x_training['intersection_id'] = lb.fit_transform(x_training['intersection_id'])
-    x_test['intersection_id'] = lb.transform(x_test['intersection_id'])
+    # load routes links file
+    routes_links_file = '../dataSets/training/' + 'route_link.csv'
+    routes_links = pd.read_csv(routes_links_file)
 
-    # Training model
-    lr = LinearRegression()
-    lr = lr.fit(x_training, y_training)
+    # load sample
+    sample_set = pd.read_csv(sample_path + 'submission_sample_travelTime.csv')
 
-    test_set['avg_travel_time'] = lr.predict(x_test)
-    test_set = test_set.round({'avg_travel_time': 2})
+    result = []
+    # load training set
+    for intersection, tollgates in route_dict.items():
+        for tollgate in tollgates:
+            # load train file
+            training_file = '{}_{}_{}{}'.format('train', intersection, tollgate, file_suffix)
+            training_set = pd.read_csv(file_path + training_file, parse_dates=['starting_time'])
+            # load test file
+            test_file = '{}_{}_{}{}'.format('test', intersection, tollgate, file_suffix)
+            test_set = pd.read_csv(file_path + test_file, parse_dates=['starting_time'])
+
+            # extend train file
+            train = training_set.append(test_set)
+            x_train = train.drop(['intersection_id', 'tollgate_id', 'avg_travel_time', 'starting_time'], axis=1)
+            y_train = train['avg_travel_time']
+
+            # load sample set
+            sample_test = sample_set[
+                (sample_set['intersection_id'] == intersection) & (sample_set['tollgate_id'] == tollgate)
+                ]
+            sample_test['starting_time'] = sample_test['time_window'].apply(
+                lambda x: datetime.strptime(x.split(',')[0].split('[')[1], '%Y-%m-%d %H:%M:%S')
+            )
+            sample_test['travel_time'] = 0
+            sample_test = traj_weather(sample_test, weather)
+            sample_test = pd.merge(sample_test, routes_links, how='left')
+            x_test = sample_test.drop(['intersection_id', 'tollgate_id', 'avg_travel_time', 'starting_time'], axis=1)
+
+            # training model
+            lr = LinearRegression()
+            lr = lr.fit(x_train, y_train)
+            # predict
+            sample_test['avg_travel_time'] = lr.predict(x_test)
+            sample_test = sample_test.round({'avg_travel_time': 2})
+
+            result.append(sample_test)
+
     # Create time window
-    test_set['end'] = test_set['starting_time'] + pd.DateOffset(minutes=20)
-    start_time = test_set['starting_time'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M:%S'))
-    end_time = test_set['end'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M:%S'))
-    test_set['time_window'] = '[' + start_time + ',' + end_time + ')'
+    result = pd.concat(result)
+    result['end'] = result['starting_time'] + pd.DateOffset(minutes=20)
+    start_time = result['starting_time'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M:%S'))
+    end_time = result['end'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M:%S'))
+    result['time_window'] = '[' + start_time + ',' + end_time + ')'
 
-    test_set = test_set[['intersection_id', 'tollgate_id', 'time_window', 'avg_travel_time']]
-    test_set.to_csv('LinearRegression.csv', index=False)
+    result = result[['intersection_id', 'tollgate_id', 'time_window', 'avg_travel_time']]
+    result.to_csv('LinearRegression_separate.csv', index=False)
 
 
 def main():
