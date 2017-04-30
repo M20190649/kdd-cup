@@ -16,27 +16,48 @@ def traj_weather(trajectories, weather):
     # delete outliers
     data_set = data_set[data_set['travel_time'] < 1000]
 
-    # Group in 20 minutes
-    start_times = []
-    for start_time in data_set['starting_time']:
-        start_times.append(start_time - timedelta(minutes=start_time.minute % 20, seconds=start_time.second, ))
-    data_set['starting_time'] = start_times
-
-    #  Cal average travel time for each route per time window
-    data_set = data_set.groupby(
-        ['intersection_id', 'tollgate_id', 'starting_time']
-    )['travel_time'].mean().reset_index(name='avg_travel_time')
+    # calculate average travel time within time window 20min
+    data_set = data_set.set_index(['starting_time'])
+    data_set = data_set.groupby([
+        'intersection_id', 'tollgate_id', pd.TimeGrouper('20Min')]
+    )['travel_time'].mean().reset_index().rename(columns={'travel_time': 'avg_travel_time'})
     data_set = data_set.round({'avg_travel_time': 2})
 
-    # Create date_hour in order to merge with weather
+    # create date_hour in order to merge with weather
     date_hour = []
+    # split date to week, hour, minute
+    weeks = []
+    hours = []
+    minutes = []
+    # set holiday
+    moon_festival = pd.date_range(
+        start=datetime(year=2016, month=9, day=15), end=datetime(year=2016, month=9, day=17)
+    )
+    national_holiday = pd.date_range(
+        start=datetime(year=2016, month=10, day=1), end=datetime(year=2016, month=10, day=7)
+    )
+    holiday_range = moon_festival.append(national_holiday)
+    holidays = []
+
     for start_time in data_set['starting_time']:
         # date_time belongs to 1:30h before or after the hour in weather
         time_delta = timedelta(hours=start_time.hour % 3, minutes=start_time.minute, seconds=start_time.second)
-        if time_delta > timedelta(hours=1, minutes=30):
-            start_time = start_time + timedelta(hours=3)
-        date_hour.append(start_time - time_delta)
+        weather_hour = start_time + timedelta(hours=3) if time_delta > timedelta(hours=1, minutes=30) else start_time
+        date_hour.append(weather_hour - time_delta)
+
+        weeks.append(datetime.strftime(start_time, format='%w'))
+        hours.append(start_time.hour)
+        minutes.append(start_time.minute)
+
+        # check holiday
+        is_holiday = 1 if start_time.date() in holiday_range else 0
+        holidays.append(is_holiday)
+
     data_set['date_hour'] = date_hour
+    data_set['week'] = weeks
+    data_set['hour'] = hours
+    data_set['minute'] = minutes
+    data_set['holidays'] = holidays
 
     ################
     # Load weather #
@@ -57,25 +78,12 @@ def traj_weather(trajectories, weather):
     # Delete unused column
     weather = weather.drop(['date', 'hour'], axis=1)
 
+    #########
+    # merge #
+    #########
     data_set = pd.merge(data_set, weather, on='date_hour')
 
-    ######################
-    # Convert to digital #
-    ######################
-    # Split date to week, hour, minute
-    weeks = []
-    hours = []
-    minutes = []
-    for start_time in data_set['starting_time']:
-        weeks.append(datetime.strftime(start_time, format='%w'))
-        hours.append(start_time.hour)
-        minutes.append(start_time.minute)
-    data_set['week'] = weeks
-    data_set['hour'] = hours
-    data_set['minute'] = minutes
-
     data_set = data_set.drop('date_hour', axis=1)
-
     return data_set
 
 
