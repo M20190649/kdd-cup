@@ -1,5 +1,6 @@
 from datetime import timedelta, datetime
 
+import numpy as np
 import pandas as pd
 
 file_suffix = '.csv'
@@ -8,7 +9,30 @@ test_path = '../../dataSets/testing_phase1/'
 output_path = '../../dataSets/travel_time/'
 
 
-def traj_weather(trajectories, weather):
+def interpolate_missing_value(data):
+    """
+    Interpolate missing starting_time 
+    """
+    starting_time = datetime(2016, 7, 19, 00, 00, 00)
+    time = [int((i - starting_time).total_seconds()) for i in data['starting_time']]
+    value = data['avg_travel_time'].values
+
+    time_all = np.linspace(0, time[-1], (time[-1]) // 1200 + 1)
+    value_all = np.interp(time_all, time, value)
+
+    time_all = [starting_time + timedelta(seconds=i) for i in time_all]
+
+    return pd.DataFrame(
+        data={
+            'intersection_id': np.unique(data['intersection_id'])[0],
+            'tollgate_id': np.unique(data['tollgate_id'])[0],
+            'starting_time': time_all,
+            'avg_travel_time': value_all
+        }
+    )
+
+
+def traj_weather(trajectories, weather, interpolate):
     data_set = trajectories[:]
     #####################
     # Load data_set #
@@ -21,7 +45,16 @@ def traj_weather(trajectories, weather):
     data_set = data_set.groupby([
         'intersection_id', 'tollgate_id', pd.TimeGrouper('20Min')]
     )['travel_time'].mean().reset_index().rename(columns={'travel_time': 'avg_travel_time'})
-    data_set = data_set.round({'avg_travel_time': 2})
+
+    if interpolate:
+        # insert missing time values
+        repair_data = pd.DataFrame()
+        for name, group in data_set.groupby(['intersection_id', 'tollgate_id']):
+            repair_data = repair_data.append(interpolate_missing_value(group), ignore_index=True)
+
+        data_set = repair_data.reindex_axis(
+            ['intersection_id', 'tollgate_id', 'starting_time', 'avg_travel_time'], axis=1
+        )
 
     # create date_hour in order to merge with weather
     date_hour = []
@@ -106,7 +139,7 @@ def main():
     weather_file = training_path + 'weather (table 7)_training_update' + file_suffix
     weather = pd.read_csv(weather_file)
 
-    training_set = traj_weather(trajectories, weather)
+    training_set = traj_weather(trajectories, weather, True)
 
     ###################
     # load test files #
@@ -117,7 +150,7 @@ def main():
     weather_file = test_path + 'weather (table 7)_test1' + file_suffix
     weather = pd.read_csv(weather_file)
 
-    test_set = traj_weather(trajectories, weather)
+    test_set = traj_weather(trajectories, weather, False)
 
     ####################
     # Merge with route #
