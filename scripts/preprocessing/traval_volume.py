@@ -8,53 +8,17 @@ test_path = '../../dataSets/testing_phase1/'
 output_path = '../../dataSets/travel_volume/'
 
 
-def vol_weather(volume, weather, predict):
+def vol_weather(volume, weather):
     data_set = volume[:]
     #####################
     # Load data_set #
     #####################
-    if not predict:
-        # calculate the number of volume within time window 20min
-        data_set = data_set.set_index(['time'])
-        df_volume_per_window = pd.DataFrame(
-            data_set.groupby(['tollgate_id', 'direction', pd.Grouper(freq='20Min')]).size())
-        df_volume_per_window.columns = ['volume']
-
-        df_volume_per_window = df_volume_per_window.reset_index()
-
-        # calculate the number of each vehicle model with time-window (model0 - model7)
-        for i in data_set['vehicle_model'].unique():
-            temp_vehicle_model = data_set[data_set['vehicle_model'] == i][
-                ['tollgate_id', 'direction', 'vehicle_model']].groupby(
-                ['tollgate_id', 'direction', pd.Grouper(freq='20Min')]).size().reset_index()
-            temp_vehicle_model.columns = ['tollgate_id', 'direction', 'time', 'vehicle_model_' + str(i)]
-            df_volume_per_window = df_volume_per_window.merge(temp_vehicle_model,
-                                                              on=['tollgate_id', 'direction', 'time'],
-                                                              how='left')
-            df_volume_per_window.fillna({'vehicle_model_' + str(i): 0}, inplace=True)
-
-        # calculate the number of vehicles having etc and not having etc
-        for i in data_set['has_etc'].unique():
-            temp_has_etc = data_set[data_set['has_etc'] == i][['tollgate_id', 'direction', 'has_etc']].groupby(
-                ['tollgate_id', 'direction', pd.Grouper(freq='20Min')]).size().reset_index()
-            temp_has_etc.columns = ['tollgate_id', 'direction', 'time', 'has_etc_' + str(i)]
-            df_volume_per_window = df_volume_per_window.merge(temp_has_etc, on=['tollgate_id', 'direction', 'time'],
-                                                              how='left')
-            df_volume_per_window.fillna({'has_etc_' + str(i): 0}, inplace=True)
-
-        # calculate the number of vehicles per type (including unknown type)
-        data_set['vehicle_type'].fillna('unknown', inplace=True)
-        for i in data_set['vehicle_type'].unique():
-            temp_vehicle_type = data_set[data_set['vehicle_type'] == i][
-                ['tollgate_id', 'direction', 'vehicle_type']].groupby(
-                ['tollgate_id', 'direction', pd.Grouper(freq='20Min')]).size().reset_index()
-            temp_vehicle_type.columns = ['tollgate_id', 'direction', 'time', 'vehicle_type_' + str(i)]
-            df_volume_per_window = df_volume_per_window.merge(temp_vehicle_type,
-                                                              on=['tollgate_id', 'direction', 'time'],
-                                                              how='left')
-            df_volume_per_window.fillna({'vehicle_type_' + str(i): 0}, inplace=True)
-    else:
-        df_volume_per_window = volume
+    # calculate the number of volume within time window 20min
+    data_set = data_set.set_index(['time'])
+    df_volume_per_window = pd.DataFrame(
+        data_set.groupby(['tollgate_id', 'direction', pd.Grouper(freq='20Min')]).size())
+    df_volume_per_window.columns = ['volume']
+    df_volume_per_window = df_volume_per_window.reset_index()
 
     # create date_hour in order to merge with weather
     date_hour = []
@@ -136,7 +100,7 @@ def main():
     weather_file = training_path + 'weather (table 7)_training_update' + file_suffix
     weather = pd.read_csv(weather_file)
 
-    training_set = vol_weather(volume, weather, False)
+    training_set = vol_weather(volume, weather)
 
     ###################
     # load test files #
@@ -147,7 +111,7 @@ def main():
     weather_file = test_path + 'weather (table 7)_test1' + file_suffix
     weather = pd.read_csv(weather_file)
 
-    test_set = vol_weather(volume, weather, False)
+    test_set = vol_weather(volume, weather)
 
     ##########
     # Export #

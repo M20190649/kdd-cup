@@ -2,8 +2,11 @@
 # !/usr/bin/env python
 from datetime import datetime, timedelta
 
+import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import AdaBoostRegressor
 
 from scripts.preprocessing.traval_volume import vol_weather
 
@@ -54,20 +57,17 @@ def avg_volume(in_file):
             )
             sample_test['volume'] = 0
             sample_test.drop('time_window', axis=1, inplace=True)
-            sample_test_dynamic_features = test_set.drop(
-                ['tollgate_id', 'direction', 'volume', 'week', 'hour', 'minute', 'holidays', 'pressure',
-                 'sea_pressure', 'wind_direction', 'wind_speed', 'temperature', 'rel_humidity', 'precipitation'],
-                axis=1)
-            sample_test_dynamic_features['time'] = sample_test_dynamic_features['time'] + timedelta(hours=2)
-            sample_test = pd.merge(sample_test, sample_test_dynamic_features, on='time')
-            sample_test = vol_weather(sample_test, weather, True)
+            sample_test = vol_weather(sample_test, weather)
             x_test = sample_test.drop(['tollgate_id', 'direction', 'volume', 'time'], axis=1)
 
             # training model
-            lr = LinearRegression()
-            lr = lr.fit(x_train, y_train)
+            rng = np.random.RandomState(1)
+            regr = AdaBoostRegressor(DecisionTreeRegressor(max_depth=2),
+                                     n_estimators=10, random_state=rng)
+            # lr = LinearRegression()
+            regr = regr.fit(x_train, y_train)
             # predict
-            sample_test['volume'] = lr.predict(x_test)
+            sample_test['volume'] = regr.predict(x_test)
             sample_test = sample_test.round({'volume': 2})
 
             result.append(sample_test)
@@ -80,7 +80,8 @@ def avg_volume(in_file):
     result['time_window'] = '[' + start_time + ',' + end_time + ')'
 
     result = result[['tollgate_id', 'time_window', 'direction', 'volume']]
-    result.to_csv('Volume_linearRegression_separate.csv', index=False)
+    result.sort(columns=['tollgate_id', 'time_window', 'direction'], inplace=True)
+    result.to_csv('volume_ensemble_separate.csv', index=False)
 
 
 def main():
