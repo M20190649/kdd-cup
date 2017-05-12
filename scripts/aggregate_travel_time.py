@@ -1,33 +1,62 @@
-from datetime import datetime
-
 import pandas as pd
-from sklearn.linear_model import LinearRegression
+from statsmodels.tsa.arima_model import ARIMA
+import numpy as np
 
-from scripts.preprocessing.travel_time import traj_weather
-
+#############
+# File path #
+#############
 file_suffix = '.csv'
 file_path = '../dataSets/travel_time/'
 sample_path = '../data/'
 
+############
+# Constant #
+############
+route_dict = {
+    'A': [2, 3],
+    'B': [1, 3],
+    'C': [1, 3]
+}
+date_list = pd.date_range(start='2016-10-18', end='2016-10-24', freq='D').format()
+hour_min_list = [
+    {'start': '08:00:00', 'end': '09:40:00'},
+    {'start': '17:00:00', 'end': '18:40:00'}
+]
+
+
+def trend_model(df):
+    result_df = pd.DataFrame(
+        columns=['time_window', 'avg_travel_time']
+    )
+    training_set = df[['starting_time', 'avg_travel_time']].set_index('starting_time')
+    # Training trend model
+    for date in date_list:
+        # Using trend_predict
+        for hour_min in hour_min_list:
+            start = date + ' ' + hour_min['start']
+            end = date + ' ' + hour_min['end']
+            train_series_interval = training_set.between_time(hour_min['start'], hour_min['end'])
+            model = ARIMA(train_series_interval, order=(5, 1, 0))
+            model_fit = model.fit(disp=0)
+
+            time_range = pd.date_range(start, end, freq='20min')
+            predictions = pd.Series(
+                model_fit.forecast(steps=len(time_range))[0].tolist(), index=time_range
+            )
+            temp_df = pd.DataFrame({
+                'time_window': predictions[start:end].index,
+                'avg_travel_time': predictions[start:end].values
+            }, columns=['time_window', 'avg_travel_time'])
+            result_df = result_df.append(temp_df, ignore_index=True)
+
+    return result_df
+
 
 def avg_travel_time():
-    route_dict = {
-        'A': [2, 3],
-        'B': [1, 3],
-        'C': [1, 3]
-    }
-    # load weather
-    weather_file = '../dataSets/testing_phase1/' + 'weather (table 7)_test1' + file_suffix
-    weather = pd.read_csv(weather_file)
-
-    # load routes links file
-    routes_links_file = '../dataSets/training/' + 'route_link.csv'
-    routes_links = pd.read_csv(routes_links_file)
-
-    # load sample
-    sample_set = pd.read_csv(sample_path + 'submission_sample_travelTime.csv')
-
-    result = []
+    mape = []
+    result_df = pd.DataFrame(
+        columns=['intersection_id', 'tollgate_id', 'time_window', 'avg_travel_time']
+    )
     # load training set
     for intersection, tollgates in route_dict.items():
         for tollgate in tollgates:
@@ -38,41 +67,22 @@ def avg_travel_time():
             test_file = '{}_{}_{}{}'.format('test', intersection, tollgate, file_suffix)
             test_set = pd.read_csv(file_path + test_file, parse_dates=['starting_time'])
 
-            # extend train file
-            train = training_set.append(test_set)
-            x_train = train.drop(['intersection_id', 'tollgate_id', 'avg_travel_time', 'starting_time'], axis=1)
-            y_train = train['avg_travel_time']
+            # train trend model
+            temp_df = trend_model(training_set)
+            temp_df['intersection_id'] = intersection
+            temp_df['tollgate_id'] = tollgate
 
-            # load sample set
-            sample_test = sample_set[
-                (sample_set['intersection_id'] == intersection) & (sample_set['tollgate_id'] == tollgate)
-                ]
-            sample_test['starting_time'] = sample_test['time_window'].apply(
-                lambda x: datetime.strptime(x.split(',')[0].split('[')[1], '%Y-%m-%d %H:%M:%S')
-            )
-            sample_test['travel_time'] = 0
-            sample_test = traj_weather(sample_test, weather)
-            sample_test = pd.merge(sample_test, routes_links, how='left')
-            x_test = sample_test.drop(['intersection_id', 'tollgate_id', 'avg_travel_time', 'starting_time'], axis=1)
+            result_df = result_df.append(temp_df)
 
-            # training model
-            lr = LinearRegression()
-            lr = lr.fit(x_train, y_train)
-            # predict
-            sample_test['avg_travel_time'] = lr.predict(x_test)
-            sample_test = sample_test.round({'avg_travel_time': 2})
-
-            result.append(sample_test)
-
-    # Create time window
-    result = pd.concat(result)
-    result['end'] = result['starting_time'] + pd.DateOffset(minutes=20)
-    start_time = result['starting_time'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M:%S'))
-    end_time = result['end'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M:%S'))
-    result['time_window'] = '[' + start_time + ',' + end_time + ')'
-
-    result = result[['intersection_id', 'tollgate_id', 'time_window', 'avg_travel_time']]
-    result.to_csv('LinearRegression_separate.csv', index=False)
+    result_df = result_df.reindex_axis(
+        ['intersection_id', 'tollgate_id', 'time_window', 'avg_travel_time'], axis=1
+    )
+    result_df['tollgate_id'] = result_df['tollgate_id'].astype(int)
+    # Prepare time window
+    window_start = result_df['time_window'].astype(str)
+    window_end = (result_df['time_window'] + pd.Timedelta(minutes=20)).astype(str)
+    result_df['time_window'] = '[' + window_start + ',' + window_end + ')'
+    result_df.to_csv('arima.csv', index=False)
 
 
 def main():
