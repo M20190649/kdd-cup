@@ -1,4 +1,6 @@
 import pandas as pd
+from keras.layers import LSTM, Dense
+from keras.models import Sequential
 from statsmodels.tsa.arima_model import ARIMA
 import numpy as np
 
@@ -6,7 +8,7 @@ import numpy as np
 # File path #
 #############
 file_suffix = '.csv'
-file_path = '../dataSets/travel_time/'
+file_path = '../dataSets/travel_time2/'
 sample_path = '../data/'
 
 ############
@@ -17,39 +19,34 @@ route_dict = {
     'B': [1, 3],
     'C': [1, 3]
 }
-date_list = pd.date_range(start='2016-10-18', end='2016-10-24', freq='D').format()
-hour_min_list = [
-    {'start': '08:00:00', 'end': '09:40:00'},
-    {'start': '17:00:00', 'end': '18:40:00'}
-]
 
 
-def trend_model(df):
-    result_df = pd.DataFrame(
-        columns=['time_window', 'avg_travel_time']
+def reshape_date(df):
+    # Reshape the data
+    data_shaped = []
+    label_shaped = []
+    starting_time = pd.DatetimeIndex(df['starting_time'])
+    for name, group in df.groupby([starting_time.hour, starting_time.minute]):
+        data_shaped.append(
+            group.drop([
+                'intersection_id', 'tollgate_id', 'starting_time', 'avg_travel_time', 'week', 'hour', 'minute'
+            ], axis=1).values
+        )
+        label_shaped.append(group['avg_travel_time'].values)
+
+    return np.asarray(data_shaped), np.asarray(label_shaped)
+
+
+def rnn(data, label, batch_size):
+    model = Sequential()
+    model.add(
+        LSTM(32, input_shape=(data.shape[0],), batch_size=batch_size, return_sequences=True, stateful=True)
     )
-    training_set = df[['starting_time', 'avg_travel_time']].set_index('starting_time')
-    # Training trend model
-    for date in date_list:
-        # Using trend_predict
-        for hour_min in hour_min_list:
-            start = date + ' ' + hour_min['start']
-            end = date + ' ' + hour_min['end']
-            train_series_interval = training_set.between_time(hour_min['start'], hour_min['end'])
-            model = ARIMA(train_series_interval, order=(5, 1, 0))
-            model_fit = model.fit(disp=0)
-
-            time_range = pd.date_range(start, end, freq='20min')
-            predictions = pd.Series(
-                model_fit.forecast(steps=len(time_range))[0].tolist(), index=time_range
-            )
-            temp_df = pd.DataFrame({
-                'time_window': predictions[start:end].index,
-                'avg_travel_time': predictions[start:end].values
-            }, columns=['time_window', 'avg_travel_time'])
-            result_df = result_df.append(temp_df, ignore_index=True)
-
-    return result_df
+    model.add(LSTM(16, return_sequences=False, stateful=True))
+    model.add(Dense(1))
+    model.compile(loss='mse', optimizer='rmsprop')
+    model.fit(data, label, batch_size=batch_size, epochs=1, shuffle=False)
+    return model
 
 
 def avg_travel_time():
@@ -68,11 +65,10 @@ def avg_travel_time():
             test_set = pd.read_csv(file_path + test_file, parse_dates=['starting_time'])
 
             # train trend model
-            temp_df = trend_model(training_set)
-            temp_df['intersection_id'] = intersection
-            temp_df['tollgate_id'] = tollgate
+            training_data, training_label = reshape_date(training_set)
+            model = rnn(training_data, training_label, 1)
 
-            result_df = result_df.append(temp_df)
+            result_df = result_df.append()
 
     result_df = result_df.reindex_axis(
         ['intersection_id', 'tollgate_id', 'time_window', 'avg_travel_time'], axis=1

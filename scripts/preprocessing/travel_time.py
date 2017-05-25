@@ -128,6 +128,35 @@ def traj_weather(trajectories, weather, interpolate):
     return data_set
 
 
+def create_sub_file():
+    # Create route data frame
+    route_list = [['A', 2], ['A', 3], ['B', 1], ['B', 3], ['C', 1], ['C', 3]]
+    route_df = pd.DataFrame(route_list, columns=['intersection_id', 'tollgate_id'])
+
+    # Create date_time data frame
+    date_list = pd.date_range(start='2016-10-25', end='2016-10-31', freq='D').format()
+    hour_min_list = [
+        {'start': '08:00:00', 'end': '09:40:00'},
+        {'start': '17:00:00', 'end': '18:40:00'}
+    ]
+    date_time = []
+    for date in date_list:
+        # Using trend_predict
+        for hour_min in hour_min_list:
+            start = date + ' ' + hour_min['start']
+            end = date + ' ' + hour_min['end']
+            time_range = pd.date_range(start, end, freq='20min')
+            date_time.extend(time_range.values)
+    date_df = pd.DataFrame({'starting_time': date_time})
+
+    # Cartesian product
+    route_df['key'] = 1
+    date_df['key'] = 1
+    sub_df = pd.merge(route_df, date_df, on='key')[['intersection_id', 'tollgate_id', 'starting_time']]
+    sub_df['travel_time'] = 0
+    return sub_df
+
+
 def split_file(path, file_type, data):
     """
     Split file according to intersection_id and tollgate_id
@@ -173,8 +202,9 @@ def main():
     test_set = traj_weather(trajectories, weather, False)
 
     ####################
-    # Create sub files #
+    # Create sub set #
     ####################
+    sub_set = create_sub_file()
 
     ####################
     # Merge with route #
@@ -184,6 +214,7 @@ def main():
     # merge them
     training_set = pd.merge(training_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
     test_set = pd.merge(test_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
+    sub_set = pd.merge(sub_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
 
     ##########
     # Export #
@@ -191,6 +222,7 @@ def main():
     # export to separate files
     split_file(output_path, 'train', training_set)
     split_file(output_path, 'test', test_set)
+    split_file(output_path, 'sub', sub_set)
 
 
 if __name__ == '__main__':

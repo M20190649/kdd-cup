@@ -89,8 +89,8 @@ def merge_route_link(path, **kwargs):
 
 
 def main():
-    training_path = '../../dataSets/training/'
-    output_path = '../../dataSets/training/'
+    training_path = '/Users/SmileYuhao/Project/kdd-cup/dataSets/training/'
+    output_path = '/Users/SmileYuhao/Project/kdd-cup/dataSets/training/'
 
     route_link_file = {
         'links_file': 'links (table 3)',
