@@ -4,9 +4,14 @@ import numpy as np
 import pandas as pd
 
 file_suffix = '.csv'
-training_path = '../../dataSets/training/'
-test_path = '../../dataSets/testing_phase1/'
-output_path = '../../dataSets/travel_time/'
+
+training1_path = '../../dataSets/training/'
+training2_path = '../../dataSets/training2/'
+
+test1_path = '../../dataSets/testing_phase1/'
+test2_path = '../../dataSets/testing_phase2/'
+
+output_path = '../../dataSets/travel_time2/'
 
 
 def interpolate_missing_value(data):
@@ -14,10 +19,13 @@ def interpolate_missing_value(data):
     Interpolate missing starting_time 
     """
     starting_time = datetime(2016, 7, 19, 00, 00, 00)
+    end_time = datetime(2016, 10, 24, 23, 40, 00)
+    time_length = int((end_time - starting_time).total_seconds())
+
     time = [int((i - starting_time).total_seconds()) for i in data['starting_time']]
     value = data['avg_travel_time'].values
 
-    time_all = np.linspace(0, time[-1], (time[-1]) // 1200 + 1)
+    time_all = np.linspace(0, time_length, time_length // 1200 + 1)
     value_all = np.interp(time_all, time, value)
 
     time_all = [starting_time + timedelta(seconds=i) for i in time_all]
@@ -126,37 +134,53 @@ def split_file(path, file_type, data):
     """
     for name, group in data.groupby(['intersection_id', 'tollgate_id']):
         file_name = '{}_{}_{}{}'.format(file_type, name[0], name[1], file_suffix)
-        group.to_csv(path + file_name, index=False)
+        group.sort_values('starting_time').to_csv(path + file_name, index=False)
 
 
 def main():
     #######################
+    # load weather files #
+    #######################
+    weather_train1_file = training1_path + 'weather (table 7)_training_update' + file_suffix
+    weather_test1_file = test1_path + 'weather (table 7)_test1' + file_suffix
+    weather_test2_file = test2_path + 'weather (table 7)_2' + file_suffix
+
+    weather_train1 = pd.read_csv(weather_train1_file)
+    weather_test1 = pd.read_csv(weather_test1_file)
+    weather_test2 = pd.read_csv(weather_test2_file)
+
+    weather = weather_train1.append(weather_test1).append(weather_test2).reset_index()
+
+    #######################
     # load training files #
     #######################
-    trajectories_file = training_path + 'trajectories(table 5)_training' + file_suffix
-    trajectories = pd.read_csv(trajectories_file, parse_dates=['starting_time'])
+    trajectories_train_file1 = training1_path + 'trajectories(table 5)_training' + file_suffix
+    trajectories_train_file2 = training2_path + 'trajectories(table_5)_training2' + file_suffix
 
-    weather_file = training_path + 'weather (table 7)_training_update' + file_suffix
-    weather = pd.read_csv(weather_file)
+    trajectories_train1 = pd.read_csv(trajectories_train_file1, parse_dates=['starting_time'])
+    trajectories_train2 = pd.read_csv(trajectories_train_file2, parse_dates=['starting_time'])
+
+    trajectories = trajectories_train1.append(trajectories_train2).reset_index()
 
     training_set = traj_weather(trajectories, weather, True)
 
     ###################
     # load test files #
     ###################
-    trajectories_file = test_path + 'trajectories(table 5)_test1' + file_suffix
+    trajectories_file = test2_path + 'trajectories(table 5)_test2' + file_suffix
     trajectories = pd.read_csv(trajectories_file, parse_dates=['starting_time'])
 
-    weather_file = test_path + 'weather (table 7)_test1' + file_suffix
-    weather = pd.read_csv(weather_file)
-
     test_set = traj_weather(trajectories, weather, False)
+
+    ####################
+    # Create sub files #
+    ####################
 
     ####################
     # Merge with route #
     ####################
     # load routes links file
-    routes_links = pd.read_csv(training_path + 'route_link.csv')
+    routes_links = pd.read_csv(training1_path + 'route_link.csv')
     # merge them
     training_set = pd.merge(training_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
     test_set = pd.merge(test_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
