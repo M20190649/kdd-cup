@@ -205,16 +205,17 @@ def main():
     # Create sub set #
     ####################
     sub_set = create_sub_file()
+    sub_set = traj_weather(sub_set, weather, False)
 
     ####################
     # Merge with route #
     ####################
-    # load routes links file
-    routes_links = pd.read_csv(training1_path + 'route_link.csv')
-    # merge them
-    training_set = pd.merge(training_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
-    test_set = pd.merge(test_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
-    sub_set = pd.merge(sub_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
+    # # load routes links file
+    # routes_links = pd.read_csv(training1_path + 'route_link.csv')
+    # # merge them
+    # training_set = pd.merge(training_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
+    # test_set = pd.merge(test_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
+    # sub_set = pd.merge(sub_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
 
     ##########
     # Export #

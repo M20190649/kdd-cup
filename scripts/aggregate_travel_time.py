@@ -1,8 +1,7 @@
+import numpy as np
 import pandas as pd
 from keras.layers import LSTM, Dense
 from keras.models import Sequential
-from statsmodels.tsa.arima_model import ARIMA
-import numpy as np
 
 #############
 # File path #
@@ -40,22 +39,23 @@ def reshape_date(df):
 def rnn(data, label, batch_size):
     model = Sequential()
     model.add(
-        LSTM(32, input_shape=(data.shape[0],), batch_size=batch_size, return_sequences=True, stateful=True)
+        LSTM(32, input_shape=data.shape[1:], batch_size=batch_size, return_sequences=True, stateful=True)
     )
     model.add(LSTM(16, return_sequences=False, stateful=True))
     model.add(Dense(1))
-    model.compile(loss='mse', optimizer='rmsprop')
+    model.compile(loss='mean_absolute_percentage_error', optimizer='RMSprop')
     model.fit(data, label, batch_size=batch_size, epochs=1, shuffle=False)
     return model
 
 
 def avg_travel_time():
-    mape = []
+    mean = []
     result_df = pd.DataFrame(
         columns=['intersection_id', 'tollgate_id', 'time_window', 'avg_travel_time']
     )
     # load training set
     for intersection, tollgates in route_dict.items():
+        mape = []
         for tollgate in tollgates:
             # load train file
             training_file = '{}_{}_{}{}'.format('train', intersection, tollgate, file_suffix)
@@ -64,12 +64,29 @@ def avg_travel_time():
             test_file = '{}_{}_{}{}'.format('test', intersection, tollgate, file_suffix)
             test_set = pd.read_csv(file_path + test_file, parse_dates=['starting_time'])
 
-            # train trend model
-            training_data, training_label = reshape_date(training_set)
+            # train RNN model
+            # training_data, training_label = reshape_date(training_set)
+            training_data = training_set.drop(
+                ['intersection_id', 'tollgate_id', 'starting_time', 'avg_travel_time'], axis=1
+            ).values
+            # Reshape training data shape
+            training_data = np.reshape(training_data, training_data.shape + (1,))
+            training_label = training_set['avg_travel_time'].values
             model = rnn(training_data, training_label, 1)
 
-            result_df = result_df.append()
+            # Predict
+            test_data = test_set.drop(
+                ['intersection_id', 'tollgate_id', 'starting_time', 'avg_travel_time'], axis=1
+            ).values
+            test_data = np.reshape(test_data, test_data.shape + (1,))
+            test_label = test_set['avg_travel_time'].values
+            pre_label = model.predict(test_data, batch_size=1)
 
+            mape.append(np.mean(np.abs((test_label - pre_label) / test_label)) * 100)
+
+        mean.append(np.mean(mape))
+
+    """
     result_df = result_df.reindex_axis(
         ['intersection_id', 'tollgate_id', 'time_window', 'avg_travel_time'], axis=1
     )
@@ -78,7 +95,8 @@ def avg_travel_time():
     window_start = result_df['time_window'].astype(str)
     window_end = (result_df['time_window'] + pd.Timedelta(minutes=20)).astype(str)
     result_df['time_window'] = '[' + window_start + ',' + window_end + ')'
-    result_df.to_csv('arima.csv', index=False)
+    result_df.to_csv('rnn.csv', index=False)
+    """
 
 
 def main():
