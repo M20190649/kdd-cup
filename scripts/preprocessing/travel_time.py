@@ -146,7 +146,7 @@ def create_sub_file():
     route_df = pd.DataFrame(route_list, columns=['intersection_id', 'tollgate_id'])
 
     # Create date_time data frame
-    date_list = pd.date_range(start='2016-10-25', end='2016-10-31 23:40:00', freq='20Min').format()
+    date_list = pd.date_range(start='2016-10-25', end='2016-10-31 23:40:00', freq='20Min')
     # hour_min_list = [
     #     {'start': '08:00:00', 'end': '09:40:00'},
     #     {'start': '17:00:00', 'end': '18:40:00'}
