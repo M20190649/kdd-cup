@@ -13,6 +13,9 @@ test2_path = '../../dataSets/testing_phase2/'
 
 output_path = '../../dataSets/travel_time2/'
 
+# Day lack of weather data
+missing_value = ['2016-09-29', '2016-09-30', '2016-10-09', '2016-10-10']
+
 
 def interpolate_missing_value(data):
     """
@@ -80,6 +83,7 @@ def traj_weather(trajectories, weather, interpolate):
     holiday_range = moon_festival.append(national_holiday)
     holidays = []
 
+    missing_weather = []
     for start_time in data_set['starting_time']:
         # date_time belongs to 1:30h before or after the hour in weather
         time_delta = timedelta(hours=start_time.hour % 3, minutes=start_time.minute, seconds=start_time.second)
@@ -91,14 +95,22 @@ def traj_weather(trajectories, weather, interpolate):
         minutes.append(start_time.minute)
 
         # check holiday
-        is_holiday = 1 if start_time.date() in holiday_range else 0
-        holidays.append(is_holiday)
+        holidays.append(1 if start_time.date() in holiday_range else 0)
+
+        # Check whether misses weather day
+        missing_weather.append(1 if start_time.strftime('%Y-%m-%d') in missing_value else 0)
 
     data_set['date_hour'] = date_hour
     data_set['week'] = weeks
     data_set['hour'] = hours
     data_set['minute'] = minutes
     data_set['holidays'] = holidays
+    data_set['missing_weather'] = missing_weather
+
+    # Delete day which is holiday or miss weather data
+    data_set = data_set[(data_set['holidays'] == 0) & (data_set['missing_weather'] == 0)]
+    # Delete column
+    data_set = data_set.drop(['holidays', 'missing_weather'], axis=1).reset_index(drop=True)
 
     ################
     # Load weather #
@@ -134,21 +146,20 @@ def create_sub_file():
     route_df = pd.DataFrame(route_list, columns=['intersection_id', 'tollgate_id'])
 
     # Create date_time data frame
-    date_list = pd.date_range(start='2016-10-25', end='2016-10-31', freq='D').format()
-    hour_min_list = [
-        {'start': '08:00:00', 'end': '09:40:00'},
-        {'start': '17:00:00', 'end': '18:40:00'}
-    ]
-    date_time = []
-    for date in date_list:
-        # Using trend_predict
-        for hour_min in hour_min_list:
-            start = date + ' ' + hour_min['start']
-            end = date + ' ' + hour_min['end']
-            time_range = pd.date_range(start, end, freq='20min')
-            date_time.extend(time_range.values)
-    date_df = pd.DataFrame({'starting_time': date_time})
-
+    date_list = pd.date_range(start='2016-10-25', end='2016-10-31 23:40:00', freq='20Min').format()
+    # hour_min_list = [
+    #     {'start': '08:00:00', 'end': '09:40:00'},
+    #     {'start': '17:00:00', 'end': '18:40:00'}
+    # ]
+    # date_time = []
+    # for date in date_list:
+    #     # Using trend_predict
+    #     for hour_min in hour_min_list:
+    #         start = date + ' ' + hour_min['start']
+    #         end = date + ' ' + hour_min['end']
+    #         time_range = pd.date_range(start, end, freq='20min')
+    #         date_time.extend(time_range.values)
+    date_df = pd.DataFrame({'starting_time': date_list})
     # Cartesian product
     route_df['key'] = 1
     date_df['key'] = 1
