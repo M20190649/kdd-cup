@@ -54,6 +54,30 @@ def interpolate_missing_value(data):
     )
 
 
+def interpolate_missing_weather(data):
+    """
+    Interpolate missing weather data
+    :param data: weather data, type pandas DataFrame
+    :return: interpolated weather data
+    """
+    columns = data.columns.values
+    starting_time = datetime(2016, 7, 1, 00, 00, 00)
+    end_time = datetime(2016, 11, 1, 00, 00, 00)
+    time_length = int((end_time - starting_time).total_seconds())
+    time = [int((i - starting_time).total_seconds()) for i in data['date_hour']]
+    time_all = np.linspace(0, time_length, time_length // 10800 + 1)
+    interpolated_data = pd.DataFrame()
+    for col in columns:
+        if col is not 'date_hour':
+            col_values = data[col].values
+            values_all = np.interp(time_all, time, col_values)
+            interpolated_data[col] = values_all
+            interpolated_data[col] = interpolated_data.round(decimals=4)
+    time_all = [starting_time + timedelta(seconds=i) for i in time_all]
+    interpolated_data['date_hour'] = time_all
+    return interpolated_data
+
+
 def traj_weather(trajectories, weather, interpolate):
     data_set = trajectories[:]
     #####################
@@ -94,7 +118,6 @@ def traj_weather(trajectories, weather, interpolate):
     holiday_range = moon_festival.append(national_holiday)
     holidays = []
 
-    missing_weather = []
     for start_time in data_set['starting_time']:
         # date_time belongs to 1:30h before or after the hour in weather
         time_delta = timedelta(hours=start_time.hour % 3, minutes=start_time.minute, seconds=start_time.second)
@@ -108,20 +131,16 @@ def traj_weather(trajectories, weather, interpolate):
         # check holiday
         holidays.append(1 if start_time.date() in holiday_range else 0)
 
-        # Check whether misses weather day
-        missing_weather.append(1 if start_time.strftime('%Y-%m-%d') in missing_value else 0)
-
     data_set['date_hour'] = date_hour
     data_set['week'] = weeks
     data_set['hour'] = hours
     data_set['minute'] = minutes
     data_set['holidays'] = holidays
-    data_set['missing_weather'] = missing_weather
 
     # Delete day which is holiday or miss weather data
-    data_set = data_set[(data_set['holidays'] == 0) & (data_set['missing_weather'] == 0)]
+    data_set = data_set[data_set['holidays'] == 0]
     # Delete column
-    data_set = data_set.drop(['holidays', 'missing_weather'], axis=1).reset_index(drop=True)
+    data_set = data_set.drop(['holidays'], axis=1).reset_index(drop=True)
 
     ################
     # Load weather #
@@ -134,6 +153,8 @@ def traj_weather(trajectories, weather, interpolate):
     )
     # Delete unused column
     weather = weather.drop(['date', 'hour'], axis=1)
+
+    weather = interpolate_missing_weather(weather)
 
     #########
     # merge #

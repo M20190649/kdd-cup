@@ -45,7 +45,7 @@ def rnn(data, label, batch_size):
     model.add(LSTM(16, return_sequences=False, stateful=True))
     model.add(Dense(label.shape[1]))
     model.compile(loss='mean_absolute_percentage_error', optimizer='RMSprop')
-    model.fit(data, label, batch_size=batch_size, epochs=300, shuffle=False, verbose=2)
+    model.fit(data, label, batch_size=batch_size, epochs=200, shuffle=False, verbose=2)
     return model
 
 
