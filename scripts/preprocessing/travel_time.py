@@ -189,7 +189,7 @@ def main():
     weather_test1 = pd.read_csv(weather_test1_file)
     weather_test2 = pd.read_csv(weather_test2_file)
 
-    weather = weather_train1.append(weather_test1).append(weather_test2).reset_index()
+    weather = weather_train1.append(weather_test1).append(weather_test2).reset_index(drop=True)
 
     #######################
     # load training files #
