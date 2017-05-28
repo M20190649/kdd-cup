@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from keras.layers import LSTM, Dense
 from keras.models import Sequential
-from sklearn.preprocessing import MinMaxScaler
 
 #############
 # File path #
@@ -46,7 +45,7 @@ def rnn(data, label, batch_size):
     model.add(LSTM(16, return_sequences=False, stateful=True))
     model.add(Dense(label.shape[1]))
     model.compile(loss='mean_absolute_percentage_error', optimizer='RMSprop')
-    model.fit(data, label, batch_size=batch_size, epochs=200, shuffle=False, verbose=2)
+    model.fit(data, label, batch_size=batch_size, epochs=300, shuffle=False, verbose=2)
     return model
 
 
@@ -72,19 +71,12 @@ def avg_travel_time():
             submission_set = pd.read_csv(file_path + submission_file, parse_dates=['starting_time'])
             # submission_set = submission_set[submission_set['week'].isin(week)].reset_index()
 
-            # Scaling features to a range
-            min_max_scaler = MinMaxScaler(feature_range=(0, 1))
-
             # Train RNN model
             training_data, training_label = reshape_date(training_set)
-            training_data = min_max_scaler.fit_transform(training_data)
-
             model = rnn(training_data, training_label, 1)
 
             # Predict
             submission_data, submission_label = reshape_date(submission_set)
-            submission_data = min_max_scaler.transform(submission_data)
-
             pre_label = model.predict(submission_data, batch_size=1).flatten()
 
             # Cal mape

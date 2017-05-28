@@ -2,7 +2,11 @@ from datetime import timedelta, datetime
 
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
 
+#############
+# File path #
+#############
 file_suffix = '.csv'
 
 training1_path = '../../dataSets/training/'
@@ -13,8 +17,15 @@ test2_path = '../../dataSets/testing_phase2/'
 
 output_path = '../../dataSets/travel_time2/'
 
+############
+# Constant #
+############
 # Day lack of weather data
 missing_value = ['2016-09-29', '2016-09-30', '2016-10-09', '2016-10-10']
+
+weather_columns = [
+    'pressure', 'sea_pressure', 'wind_direction', 'wind_speed', 'temperature', 'rel_humidity', 'precipitation'
+]
 
 
 def interpolate_missing_value(data):
@@ -115,13 +126,6 @@ def traj_weather(trajectories, weather, interpolate):
     ################
     # Load weather #
     ################
-    # Change wind_direction outlier
-    outlier_index = weather.ix[weather['wind_direction'] == 999017].index.values
-    for index in outlier_index:
-        last = weather.loc[index - 1, 'wind_direction']
-        nest = weather.loc[index + 1, 'wind_direction']
-        weather.loc[index, 'wind_direction'] = (last + nest) / 2.0
-
     # Combine date and hour
     weather['date_hour'] = pd.to_datetime(
         weather['date'], format="%Y-%m-%d"
@@ -190,6 +194,17 @@ def main():
     weather_test2 = pd.read_csv(weather_test2_file)
 
     weather = weather_train1.append(weather_test1).append(weather_test2).reset_index(drop=True)
+
+    # Change wind_direction outlier
+    outlier_index = weather.ix[weather['wind_direction'] == 999017].index.values
+    for index in outlier_index:
+        last = weather.loc[index - 1, 'wind_direction']
+        nest = weather.loc[index + 1, 'wind_direction']
+        weather.loc[index, 'wind_direction'] = (last + nest) / 2.0
+
+    # Scaling features to a range
+    min_max_scaler = MinMaxScaler(feature_range=(0, 1))
+    weather[weather_columns] = min_max_scaler.fit_transform(weather[weather_columns]).round(decimals=4)
 
     #######################
     # load training files #
