@@ -72,7 +72,7 @@ def interpolate_missing_weather(data):
             col_values = data[col].values
             values_all = np.interp(time_all, time, col_values)
             interpolated_data[col] = values_all
-            interpolated_data[col] = interpolated_data.round(decimals=4)
+            interpolated_data[col] = interpolated_data[col].round(decimals=4)
     time_all = [starting_time + timedelta(seconds=i) for i in time_all]
     interpolated_data['date_hour'] = time_all
     return interpolated_data
