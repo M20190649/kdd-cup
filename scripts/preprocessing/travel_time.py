@@ -2,7 +2,7 @@ from datetime import timedelta, datetime
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
+from sklearn import preprocessing
 
 #############
 # File path #
@@ -20,11 +20,8 @@ output_path = '../../dataSets/travel_time2/'
 ############
 # Constant #
 ############
-# Day lack of weather data
-missing_value = ['2016-09-29', '2016-09-30', '2016-10-09', '2016-10-10']
-
-weather_columns = [
-    'pressure', 'sea_pressure', 'wind_direction', 'wind_speed', 'temperature', 'rel_humidity', 'precipitation'
+feature_not_normalize = [
+    'intersection_id', 'tollgate_id', 'starting_time', 'avg_travel_time'
 ]
 
 
@@ -223,10 +220,6 @@ def main():
         nest = weather.loc[index + 1, 'wind_direction']
         weather.loc[index, 'wind_direction'] = (last + nest) / 2.0
 
-    # Scaling features to a range
-    min_max_scaler = MinMaxScaler(feature_range=(0, 1))
-    weather[weather_columns] = min_max_scaler.fit_transform(weather[weather_columns]).round(decimals=4)
-
     #######################
     # load training files #
     #######################
@@ -263,6 +256,20 @@ def main():
     # training_set = pd.merge(training_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
     # test_set = pd.merge(test_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
     # sub_set = pd.merge(sub_set, routes_links, on=['intersection_id', 'tollgate_id'], how='left')
+
+    ##########
+    # Export #
+    ##########
+    feature_nor = list(set(training_set.columns.values) - set(feature_not_normalize))
+    data_nor = training_set.append(test_set).append(sub_set)[feature_nor]
+
+    # Fit scaler
+    max_abs_scaler = preprocessing.MinMaxScaler()
+    max_abs_scaler.fit(data_nor)
+
+    training_set[feature_nor] = max_abs_scaler.transform(training_set[feature_nor]).round(decimals=4)
+    test_set[feature_nor] = max_abs_scaler.transform(test_set[feature_nor]).round(decimals=4)
+    sub_set[feature_nor] = max_abs_scaler.transform(sub_set[feature_nor]).round(decimals=4)
 
     ##########
     # Export #
