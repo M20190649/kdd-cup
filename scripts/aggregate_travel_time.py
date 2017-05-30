@@ -4,8 +4,6 @@ import numpy as np
 import pandas as pd
 from keras.layers import LSTM, Dense, Dropout
 from keras.models import Sequential
-from keras.wrappers.scikit_learn import KerasRegressor
-from sklearn.model_selection import GridSearchCV
 
 #############
 # File path #
@@ -25,6 +23,12 @@ route_dict = {
     'C': [1, 3]
 }
 
+dropout_rates = {
+    'A_2': 0.1, 'A_3': 0.4,
+    'B_1': 0.4, 'B_3': 0.4,
+    'C_1': 0.4, 'C_3': 0.4
+}
+
 
 def reshape_date(df):
     # Reshape the data
@@ -42,31 +46,31 @@ def reshape_date(df):
     return np.asarray(data_shaped), np.asarray(label_shaped)
 
 
-def drop_out_model(dropout_rate):
+def rnn(data, label, batch_size, dropout_rate):
     model = Sequential()
 
-    model.add(LSTM(32, return_sequences=True, stateful=True, input_shape=(72, 8), batch_size=1))
+    model.add(LSTM(32, input_shape=data.shape[1:], batch_size=batch_size, return_sequences=True, stateful=True))
     model.add(Dropout(dropout_rate))
 
     model.add(LSTM(16, return_sequences=False, stateful=True))
     model.add(Dropout(dropout_rate))
 
-    model.add(Dense(72))
+    model.add(Dense(label.shape[1]))
 
     model.compile(loss='mean_absolute_percentage_error', optimizer='RMSprop')
-    # model.fit(data, label, batch_size=batch_size, epochs=200, shuffle=False, verbose=2)
+
+    model.fit(data, label, batch_size=batch_size, epochs=200, shuffle=False, verbose=0)
 
     return model
 
 
 def avg_travel_time():
     result_df = pd.DataFrame()
-    # Load training set
-    mape = []
-    best_para = []
+    mape_list = []
     for intersection, tollgates in route_dict.items():
         for tollgate in tollgates:
             print('Starting {}_{}'.format(intersection, tollgate))
+
             # Load train file
             training_file = '{}_{}_{}{}'.format('train', intersection, tollgate, file_suffix)
             training_set = pd.read_csv(file_path + training_file, parse_dates=['starting_time'])
@@ -81,36 +85,24 @@ def avg_travel_time():
 
             # Train RNN model
             training_data, training_label = reshape_date(training_set)
-            # model = rnn(training_data, training_label, 1)
-            model = KerasRegressor(build_fn=drop_out_model, epochs=200, verbose=0, batch_size=1)
+            dropout_rate = dropout_rates['{}_{}'.format(intersection, tollgate)]
+            print('Drop out rate: {}'.format(dropout_rate))
 
-            dropout_rate = np.arange(0.0, 0.5, 0.1)
-            param_grid = dict(dropout_rate=dropout_rate)
-            grid = GridSearchCV(estimator=model, param_grid=param_grid, n_jobs=-1)
-            grid_result = grid.fit(training_data, training_label)
-
-            print(
-                "%s %d Best: %f using %s" % (intersection, tollgate, grid_result.best_score_, grid_result.best_params_)
-            )
-
-            means = grid_result.cv_results_['mean_test_score']
-            stds = grid_result.cv_results_['std_test_score']
-            params = grid_result.cv_results_['params']
-            for mean, stdev, param in zip(means, stds, params):
-                print("%f (%f) with: %r" % (mean, stdev, param))
+            model = rnn(training_data, training_label, 1, dropout_rate)
 
             # Predict
             submission_data, submission_label = reshape_date(submission_set)
-            pre_label = grid_result.predict(submission_data).flatten()
-            print('Finish predict')
+            pre_label = model.predict(submission_data, batch_size=1).flatten()
 
             # Cal mape
             test_date = test_set['starting_time']
             test_label = test_set['avg_travel_time']
             pre_label1 = pre_label[submission_set[submission_set['starting_time'].isin(test_date)].index.values]
-            mape.append(np.mean(np.abs((test_label - pre_label1) / test_label)) * 100)
 
-            print("{}_{}: mape = {}".format(intersection, tollgate, mape))
+            mape = np.mean(np.abs((test_label - pre_label1) / test_label)) * 100
+            mape_list.append(mape)
+
+            print("{}_{}: mape = {}\n".format(intersection, tollgate, mape))
 
             # Paper result DataFrame
             pre_label2 = pre_label[submission_set[submission_set['starting_time'].isin(sub_date)].index.values]
@@ -122,22 +114,21 @@ def avg_travel_time():
             })
             result_df = result_df.append(temp_df, ignore_index=True)
 
-    print("Mape list: ".format(mape))
-    print(best_para)
-    mean = np.mean(mape)
+    print(mape_list)
+    mean = np.mean(mape_list)
     print(mean)
 
     ######################
     # Save result to csv #
     ######################
     # Prepare time window
-    # window_start = result_df['starting_time'].astype(str)
-    # window_end = (result_df['starting_time'] + pd.Timedelta(minutes=20)).astype(str)
-    # result_df['time_window'] = '[' + window_start + ',' + window_end + ')'
-    #
-    # result_df.drop(['starting_time'], axis=1).reindex_axis(
-    #     ['intersection_id', 'tollgate_id', 'time_window', 'avg_travel_time'], axis=1
-    # ).to_csv('rnn.csv', index=False)
+    window_start = result_df['starting_time'].astype(str)
+    window_end = (result_df['starting_time'] + pd.Timedelta(minutes=20)).astype(str)
+    result_df['time_window'] = '[' + window_start + ',' + window_end + ')'
+    # Save to the file
+    result_df.drop(['starting_time'], axis=1).reindex_axis(
+        ['intersection_id', 'tollgate_id', 'time_window', 'avg_travel_time'], axis=1
+    ).to_csv('dropOut.csv', index=False)
 
 
 def main():
