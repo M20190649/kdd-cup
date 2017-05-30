@@ -46,14 +46,16 @@ def reshape_date(df):
     return np.asarray(data_shaped), np.asarray(label_shaped)
 
 
-def rnn(data, label, batch_size, dropout_rate):
+def rnn(data, label, batch_size):
     model = Sequential()
 
-    model.add(LSTM(32, input_shape=data.shape[1:], batch_size=batch_size, return_sequences=True, stateful=True))
-    model.add(Dropout(dropout_rate))
+    model.add(LSTM(64, input_shape=data.shape[1:], batch_size=batch_size, return_sequences=True, stateful=True))
+    # model.add(Dropout(dropout_rate))
+
+    model.add(LSTM(32, return_sequences=True, stateful=True))
+    # model.add(Dropout(dropout_rate))
 
     model.add(LSTM(16, return_sequences=False, stateful=True))
-    model.add(Dropout(dropout_rate))
 
     model.add(Dense(label.shape[1]))
 
@@ -85,10 +87,10 @@ def avg_travel_time():
 
             # Train RNN model
             training_data, training_label = reshape_date(training_set)
-            dropout_rate = dropout_rates['{}_{}'.format(intersection, tollgate)]
-            print('Drop out rate: {}'.format(dropout_rate))
+            # dropout_rate = dropout_rates['{}_{}'.format(intersection, tollgate)]
+            # print('Drop out rate: {}'.format(dropout_rate))
 
-            model = rnn(training_data, training_label, 1, dropout_rate)
+            model = rnn(training_data, training_label, 1)
 
             # Predict
             submission_data, submission_label = reshape_date(submission_set)
